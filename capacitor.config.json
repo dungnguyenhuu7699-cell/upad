@@ -1,0 +1,10 @@
+{
+  "appId": "com.kehoach.app",
+  "appName": "Kế Hoạch",
+  "webDir": "www",
+  "backgroundColor": "#020617",
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "LocalNotifications": { "iconColor": "#2563EB" }
+  }
+}
