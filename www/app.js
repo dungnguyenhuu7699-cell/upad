@@ -254,6 +254,7 @@ const CAP = window.Capacitor;
 const NATIVE = !!(CAP && typeof CAP.isNativePlatform === 'function' && CAP.isNativePlatform());
 const LN = NATIVE ? CAP.Plugins.LocalNotifications : null;
 const nid = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return (Math.abs(h) % 2147483000) + 1; };
+const CHANNEL = 'reminders_v2';
 let nativeReady = null, nativeTimer = null, exactAsked = false;
 
 function nativeSetup() {
@@ -264,7 +265,9 @@ function nativeSetup() {
       let perm = await LN.checkPermissions();
       if (perm.display !== 'granted') perm = await LN.requestPermissions();
       if (perm.display !== 'granted') { toast('Hãy cho phép thông báo cho Kế Hoạch trong Cài đặt điện thoại.'); return false; }
-      await LN.createChannel({ id: 'reminders', name: 'Nhắc nhở công việc', description: 'Báo giờ bắt đầu và hết giờ đếm ngược', importance: 5, visibility: 1, vibration: true, lights: true });
+      // Kênh cũ 'reminders' bị câm (thiếu âm thanh) và Android không cho sửa kênh đã tạo → xoá và tạo kênh mới có tiếng chuông
+      try { await LN.deleteChannel({ id: 'reminders' }); } catch (e) {}
+      await LN.createChannel({ id: CHANNEL, name: 'Nhắc nhở công việc', description: 'Báo giờ bắt đầu và hết giờ đếm ngược', importance: 5, visibility: 1, sound: 'chime.wav', vibration: true, lights: true });
       try {
         const ex = await LN.checkExactNotificationSetting();
         if (ex.exact_alarm === 'denied' && !exactAsked) {
@@ -272,6 +275,10 @@ function nativeSetup() {
           if (window.confirm('Để báo đúng giờ khi đã đóng app, hãy bật quyền "Báo thức & lời nhắc" cho Kế Hoạch. Mở cài đặt ngay?')) await LN.changeExactNotificationSetting();
         }
       } catch (e) { /* Android cũ không cần */ }
+      if (!lsGet('kh_battery_hint')) {
+        lsSet('kh_battery_hint', '1');
+        window.alert('Để báo thức đúng giờ khi đã đóng app:\nCài đặt → Ứng dụng → Kế Hoạch → Pin → chọn "Không hạn chế" (và bật "Tự khởi động" nếu máy có).');
+      }
       return true;
     } catch (e) { console.warn('Native setup', e); nativeReady = null; return false; }
   })();
@@ -294,7 +301,7 @@ function rescheduleNative(delay = 800) {
           id: nid(t.id + '_' + d),
           title: `🔔 Đến giờ: ${t.title}`,
           body: t.duration ? `Thời lượng: ${t.duration} phút. Mở app để bắt đầu đếm giờ!` : 'Đã đến giờ bắt đầu công việc!',
-          channelId: 'reminders',
+          channelId: CHANNEL, sound: 'chime.wav',
           extra: { kind: 'task' },
           schedule: { on: { weekday: d + 1, hour: +m[1], minute: +m[2] }, allowWhileIdle: true },   // lặp hằng tuần (CN = 1)
         }));
@@ -309,7 +316,7 @@ async function scheduleTimerNative(id, endAt, task) {
   try {
     await LN.schedule({ notifications: [{
       id: nid('timer_' + id), title: 'Hết giờ!', body: `Đã hoàn thành ${task.duration} phút cho "${task.title}".`,
-      channelId: 'reminders', extra: { kind: 'timer' }, schedule: { at: new Date(endAt), allowWhileIdle: true },
+      channelId: CHANNEL, sound: 'chime.wav', extra: { kind: 'timer' }, schedule: { at: new Date(endAt), allowWhileIdle: true },
     }] });
   } catch (e) { console.warn('Native timer', e); }
 }
@@ -342,7 +349,7 @@ function requestNotificationAndSound() {
     nativeSetup().then(async (ok) => {
       if (!ok) return;
       rescheduleNative(0);
-      await LN.schedule({ notifications: [{ id: 1, title: 'Kế Hoạch', body: 'Báo thức đã sẵn sàng! Thông báo sẽ hiện cả khi đã đóng app.', channelId: 'reminders', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
+      await LN.schedule({ notifications: [{ id: 1, title: 'Kế Hoạch', body: 'Báo thức đã sẵn sàng! Thông báo sẽ hiện cả khi đã đóng app.', channelId: CHANNEL, sound: 'chime.wav', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
       $('btn-sound-test').textContent = '🔔 Đã bật'; $('btn-sound-test').classList.add('on');
       toast('Sẽ có thông báo thử sau 2 giây.');
     });
