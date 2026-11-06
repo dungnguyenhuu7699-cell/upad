@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Kế Hoạch</title>
+  <meta name="description" content="Quản lý kế hoạch hằng ngày - chạy online & offline" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kế Hoạch" />
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-in">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m12 8 4 4-4 4"/><path d="M8 12h8"/></svg>
+        </div>
+        <div>
+          <div class="title-row">
+            <h1>Kế Hoạch</h1>
+            <button id="sync-badge" class="badge synced" data-act="sync" title="Bấm để đồng bộ ngay">
+              <span class="dot"></span><span id="sync-text">Đang kiểm tra…</span>
+            </button>
+            <button id="btn-install-pwa" data-act="install" class="chip-btn install hidden">📲 Cài App</button>
+            <button id="btn-sound-test" data-act="notify" class="chip-btn" title="Bật thông báo & thử chuông">🔔 Chuông</button>
+          </div>
+          <p class="date-text" id="current-date-text">Đang tải ngày...</p>
+        </div>
+      </div>
+      <button class="btn-add" data-act="add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Thêm việc</span>
+      </button>
+    </div>
+  </header>
+  <div id="sync-banner" class="banner hidden"></div>
+
+  <main>
+    <section class="card">
+      <div class="progress-head">
+        <div class="progress-label"><i></i><span id="progress-title">Tiến độ hôm nay</span></div>
+        <span id="stat-percent" class="mono">0%</span>
+      </div>
+      <div class="bar"><div id="stat-progress-bar"></div></div>
+      <div class="stats">
+        <div class="stat"><span id="stat-col1-label">Việc hôm nay</span><b id="stat-col1-val">0</b></div>
+        <div class="stat"><span id="stat-col2-label">Đã hoàn thành</span><b id="stat-col2-val" class="ok">0</b></div>
+      </div>
+    </section>
+
+    <div class="tabbar">
+      <div class="tabs">
+        <button id="tab-today-btn" class="tab active" data-act="tab" data-tab="today">Hôm nay</button>
+        <button id="tab-month-btn" class="tab" data-act="tab" data-tab="month">Lịch tháng</button>
+      </div>
+      <div id="month-nav" class="month-nav">
+        <button data-act="month" data-delta="-1" aria-label="Tháng trước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span id="month-title">Tháng --</span>
+        <button data-act="month" data-delta="1" aria-label="Tháng sau"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+    </div>
+
+    <section id="view-today"><div id="today-tasks-container" class="list"></div></section>
+
+    <section id="view-month" class="hidden">
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr id="matrix-header-row"></tr></thead>
+          <tbody id="matrix-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal-backdrop" class="backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modal-heading">Thêm kế hoạch mới</h3>
+        <button data-act="close" aria-label="Đóng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <input type="hidden" id="editing-task-id" value="" />
+      <div class="form">
+        <div><label for="task-title-input">Tên kế hoạch / công việc <sup>*</sup></label>
+          <input type="text" id="task-title-input" maxlength="120" placeholder="Ví dụ: Đọc sách, Tập gym, Báo cáo tuần..." /></div>
+        <div><label for="task-start-time">Giờ bắt đầu dự kiến</label>
+          <input type="time" id="task-start-time" class="mono" /></div>
+        <div><label for="task-duration-input">Thời lượng đếm ngược (Phút)</label>
+          <input type="number" id="task-duration-input" inputmode="numeric" placeholder="Ví dụ: 30" min="1" max="360" /></div>
+        <div><label for="task-note-input">Ghi chú chi tiết</label>
+          <textarea id="task-note-input" rows="2" maxlength="500" placeholder="Ghi chú thêm..."></textarea></div>
+        <div><label>Lặp lại vào các thứ trong tuần</label>
+          <div class="days" id="days-selector">
+            <button type="button" data-act="day" data-day="1" class="day-btn">T2</button>
+            <button type="button" data-act="day" data-day="2" class="day-btn">T3</button>
+            <button type="button" data-act="day" data-day="3" class="day-btn">T4</button>
+            <button type="button" data-act="day" data-day="4" class="day-btn">T5</button>
+            <button type="button" data-act="day" data-day="5" class="day-btn">T6</button>
+            <button type="button" data-act="day" data-day="6" class="day-btn">T7</button>
+            <button type="button" data-act="day" data-day="0" class="day-btn sun">CN</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" data-act="close">Hủy</button>
+        <button class="btn-save" data-act="save">Lưu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
