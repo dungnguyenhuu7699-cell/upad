@@ -346,6 +346,7 @@ function updateBellButton() {
 
 function requestNotificationAndSound() {
   if (LN) {
+    playChimeSound();                       // nghe thử ngay như bản web
     nativeSetup().then(async (ok) => {
       if (!ok) return;
       rescheduleNative(0);
