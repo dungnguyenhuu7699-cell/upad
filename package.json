@@ -2,11 +2,13 @@
   "name": "ke-hoach-android",
   "version": "1.0.0",
   "private": true,
-  "description": "Kế Hoạch - bản Android (Capacitor) có báo thức thật",
+  "description": "K\u1ebf Ho\u1ea1ch - b\u1ea3n Android (Capacitor) c\u00f3 b\u00e1o th\u1ee9c th\u1eadt",
   "dependencies": {
     "@capacitor/android": "^6.2.0",
     "@capacitor/cli": "^6.2.0",
     "@capacitor/core": "^6.2.0",
-    "@capacitor/local-notifications": "^6.1.0"
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/local-notifications": "^6.1.0",
+    "@capacitor/share": "^6.0.0"
   }
 }
