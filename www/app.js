@@ -245,7 +245,7 @@ function setSyncUI() {
 
 window.addEventListener('online', () => { setSyncUI(); scheduleSync(300); });
 window.addEventListener('offline', () => { syncStatus = 'offline'; setSyncUI(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkDayChange(); scheduleSync(200); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkDayChange(); scheduleSync(200); rescheduleNative(1000); } });
 window.addEventListener('focus', () => scheduleSync(300));
 setInterval(() => { if (!document.hidden) syncNow(); }, 20000);   // nhận thay đổi từ máy khác
 
@@ -285,30 +285,42 @@ function nativeSetup() {
   return nativeReady;
 }
 
+/* Đặt từng báo thức một lần (không lặp) cho 14 ngày tới — đáng tin cậy hơn kiểu lặp hằng tuần,
+ * và tự bỏ qua những việc đã tick xong. App tự đặt lại mỗi lần mở / sửa / đồng bộ. */
+const NATIVE_DAYS = 14, NATIVE_MAX = 400;
+async function doRescheduleNative() {
+  if (!(await nativeSetup())) return -1;
+  try {
+    const pend = await LN.getPending();
+    const old = (pend.notifications || []).filter((n) => !(n.extra && n.extra.kind === 'timer'));
+    if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
+    const list = [], now = Date.now(), tasks = visible();
+    for (let off = 0; off < NATIVE_DAYS && list.length < NATIVE_MAX; off++) {
+      const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + off);
+      const ds = dateStr(day), dow = day.getDay();
+      for (const t of tasks) {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(t.startTime || '');
+        if (!m || !t.daysOfWeek.includes(dow) || t.completions[ds]) continue;
+        const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), +m[1], +m[2], 0);
+        if (at.getTime() <= now + 3000) continue;
+        list.push({
+          id: nid(t.id + '_' + ds),
+          title: `🔔 Đến giờ: ${t.title}`,
+          body: t.duration ? `Thời lượng: ${t.duration} phút. Mở app để bắt đầu đếm giờ!` : 'Đã đến giờ bắt đầu công việc!',
+          channelId: CHANNEL, sound: 'chime.wav', extra: { kind: 'task' },
+          schedule: { at, allowWhileIdle: true },
+        });
+        if (list.length >= NATIVE_MAX) break;
+      }
+    }
+    if (list.length) await LN.schedule({ notifications: list });
+    return list.length;
+  } catch (e) { console.warn('Native schedule', e); return -2; }
+}
 function rescheduleNative(delay = 800) {
   if (!LN) return;
   clearTimeout(nativeTimer);
-  nativeTimer = setTimeout(async () => {
-    if (!(await nativeSetup())) return;
-    try {
-      const pend = await LN.getPending();
-      const old = (pend.notifications || []).filter((n) => !(n.extra && n.extra.kind === 'timer'));
-      if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
-      const list = [];
-      visible().forEach((t) => {
-        const m = /^(\d{1,2}):(\d{2})$/.exec(t.startTime || ''); if (!m) return;
-        t.daysOfWeek.forEach((d) => list.push({
-          id: nid(t.id + '_' + d),
-          title: `🔔 Đến giờ: ${t.title}`,
-          body: t.duration ? `Thời lượng: ${t.duration} phút. Mở app để bắt đầu đếm giờ!` : 'Đã đến giờ bắt đầu công việc!',
-          channelId: CHANNEL, sound: 'chime.wav',
-          extra: { kind: 'task' },
-          schedule: { on: { weekday: d + 1, hour: +m[1], minute: +m[2] }, allowWhileIdle: true },   // lặp hằng tuần (CN = 1)
-        }));
-      });
-      if (list.length) await LN.schedule({ notifications: list });
-    } catch (e) { console.warn('Native schedule', e); }
-  }, delay);
+  nativeTimer = setTimeout(doRescheduleNative, delay);
 }
 
 async function scheduleTimerNative(id, endAt, task) {
@@ -349,10 +361,12 @@ function requestNotificationAndSound() {
     playChimeSound();                       // nghe thử ngay như bản web
     nativeSetup().then(async (ok) => {
       if (!ok) return;
-      rescheduleNative(0);
+      const n = await doRescheduleNative();
       await LN.schedule({ notifications: [{ id: 1, title: 'Kế Hoạch', body: 'Báo thức đã sẵn sàng! Thông báo sẽ hiện cả khi đã đóng app.', channelId: CHANNEL, sound: 'chime.wav', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
       $('btn-sound-test').textContent = '🔔 Đã bật'; $('btn-sound-test').classList.add('on');
-      toast('Sẽ có thông báo thử sau 2 giây.');
+      let exact = '';
+      try { const ex = await LN.checkExactNotificationSetting(); if (ex.exact_alarm === 'denied') exact = ' ⚠ Chưa bật quyền "Báo thức & lời nhắc".'; } catch (e) {}
+      toast(n >= 0 ? `Đã đặt ${n} báo thức sắp tới. Thông báo thử sau 2 giây.${exact}` : 'Không đặt được báo thức, hãy kiểm tra quyền thông báo.');
     });
     return;
   }
@@ -602,9 +616,109 @@ let shownDay = todayStr();
 function checkDayChange() { if (todayStr() !== shownDay) { shownDay = todayStr(); render(); } }
 setInterval(checkDayChange, 30000);
 
+/* ================= Excel: xuất / nhập ================= */
+const XL_MIME = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel' };
+const toBase64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+
+async function deliverFile(name, bytes, mime) {
+  const FS = NATIVE && CAP.Plugins.Filesystem, SH = NATIVE && CAP.Plugins.Share;
+  if (FS && SH) {                           // bản Android: lưu vào bộ nhớ đệm rồi mở bảng chia sẻ / lưu
+    try {
+      const r = await FS.writeFile({ path: name, data: toBase64(bytes), directory: 'CACHE' });
+      await SH.share({ title: name, url: r.uri, dialogTitle: 'Lưu hoặc gửi file Excel' });
+      return;
+    } catch (e) { if (/cancel/i.test(String((e && e.message) || e))) return; console.warn('Share lỗi, thử tải trực tiếp', e); }
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function exportExcel(kind) {
+  try {
+    const model = window.KHExcel.buildModel(state.tasks, state.year, state.month);
+    const bytes = kind === 'xls' ? window.KHExcel.buildXls(model) : window.KHExcel.buildXlsx(model);
+    await deliverFile(`KeHoach_${state.year}-${pad(state.month + 1)}.${kind}`, bytes, XL_MIME[kind]);
+    toast(`Đã xuất ${visible().length} việc của tháng ${state.month + 1}/${state.year}`);
+  } catch (e) { console.warn(e); toast('Không xuất được: ' + e.message); }
+}
+
+const normTitle = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function inferDays(it) {                     // bảng có ô "–" → suy ra các thứ có lịch
+  const ds = Object.keys(it.marks);
+  if (!ds.some((d) => it.marks[d] === 'na')) return null;
+  const set = new Set();
+  ds.forEach((d) => { if (it.marks[d] !== 'na') { const [y, m, dd] = d.split('-').map(Number); set.add(new Date(y, m - 1, dd).getDay()); } });
+  return set.size ? [...set].sort() : null;
+}
+
+function planImport(tables) {
+  const tasks = JSON.parse(JSON.stringify(state.tasks)).map(normalizeTask).filter(Boolean);
+  const now = Date.now(), used = new Set();
+  let seq = 0, added = 0, updated = 0, ticks = 0;
+  for (const tb of tables) {
+    for (const it of tb.items) {
+      const live = tasks.filter((t) => !t.deleted && !used.has(t.id));
+      let t = it.id ? live.find((x) => x.id === it.id) : null;
+      if (!t) {
+        const key = normTitle(it.title), cands = live.filter((x) => normTitle(x.title) === key);
+        t = (it.time !== undefined && cands.find((x) => x.startTime === it.time)) || cands[0] || null;
+      }
+      let isNew = false, changed = false;
+      if (!t) {
+        isNew = true; added++;
+        t = { id: String(now + seq++), title: it.title, startTime: it.time || '', duration: it.duration || 0, note: it.note || '',
+              daysOfWeek: it.days || inferDays(it) || [1, 2, 3, 4, 5], completions: {}, completionsAt: {}, updatedAt: now };
+        tasks.push(t);
+      } else {
+        const next = {};
+        if (it.title !== t.title) next.title = it.title;
+        if (it.time !== undefined && it.time !== t.startTime) next.startTime = it.time;
+        if (it.duration !== undefined && it.duration !== t.duration) next.duration = it.duration;
+        if (it.note !== undefined && it.note !== t.note) next.note = it.note;
+        const nd = it.days; if (nd && stable(nd) !== stable([...t.daysOfWeek].sort())) next.daysOfWeek = nd;
+        if (Object.keys(next).length) { Object.assign(t, next, { updatedAt: now }); changed = true; }
+      }
+      used.add(t.id);
+      for (const ds of Object.keys(it.marks)) {
+        const m = it.marks[ds]; if (m === 'na') continue;
+        const want = m === 'done';
+        if (want !== !!t.completions[ds]) { if (want || t.completions[ds] !== undefined) { t.completions[ds] = want; t.completionsAt[ds] = now; ticks++; changed = true; } }
+      }
+      if (changed && !isNew) updated++;
+    }
+  }
+  return { tasks, added, updated, ticks };
+}
+
+async function importExcelFile(file) {
+  try {
+    const sheets = await window.KHExcel.parseWorkbook(await file.arrayBuffer());
+    const fb = { month: state.month, year: state.year };
+    const tables = sheets.map((s) => window.KHExcel.parseMonthTable(s, fb)).filter(Boolean);
+    if (!tables.length) { toast('Không nhận ra bảng kế hoạch: hàng tiêu đề cần có cột "Kế hoạch" (và Giờ, Lặp lại, các ngày…).'); return; }
+    const plan = planImport(tables);
+    const label = tables.map((t) => `${t.month}/${t.year}`).join(', ');
+    const guess = tables.some((t) => t.monthFrom === 'fallback') ? '\n(Không thấy tháng/năm trong file nên tạm tính là tháng đang xem.)' : '';
+    if (!plan.added && !plan.updated && !plan.ticks) { toast(`File tháng ${label}: không có thay đổi nào so với trong app.`); return; }
+    if (!window.confirm(`Nhập Excel tháng ${label}:\n• Thêm mới ${plan.added} việc\n• Cập nhật ${plan.updated} việc\n• ${plan.ticks} ô tick thay đổi${guess}\n\nTiếp tục?`)) return;
+    state.tasks = plan.tasks;
+    if (tables.length === 1) { state.month = tables[0].month - 1; state.year = tables[0].year; }
+    commit();
+    closeExcel();
+    toast(`Đã nhập: +${plan.added} mới, ${plan.updated} cập nhật, ${plan.ticks} ô tick.`);
+  } catch (e) { console.warn(e); toast('Không đọc được file: ' + e.message); }
+}
+
+function openExcel() { $('excel-month').textContent = `${state.month + 1}/${state.year}`; $('excel-backdrop').classList.remove('hidden'); }
+function closeExcel() { $('excel-backdrop').classList.add('hidden'); }
+$('excel-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importExcelFile(f); });
+if (!NATIVE) $('excel-file').setAttribute('accept', '.xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv');
+
 /* ================= Sự kiện ================= */
 document.addEventListener('click', (e) => {
   if (e.target.id === 'modal-backdrop') return closeModal();
+  if (e.target.id === 'excel-backdrop') return closeExcel();
   const el = e.target.closest('[data-act]'); if (!el) return;
   const { act, id, date } = el.dataset;
   switch (act) {
@@ -627,9 +741,15 @@ document.addEventListener('click', (e) => {
     case 'sync': toast(navigator.onLine ? 'Đang đồng bộ…' : 'Đang ngoại tuyến — dữ liệu sẽ tự đẩy lên khi có mạng.'); syncNow(); break;
     case 'notify': requestNotificationAndSound(); break;
     case 'install': triggerInstall(); break;
+    case 'excel': openExcel(); break;
+    case 'xl-close': closeExcel(); break;
+    case 'xl-xlsx': exportExcel('xlsx'); break;
+    case 'xl-xls': exportExcel('xls'); break;
+    case 'xl-import': $('excel-file').click(); break;
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('excel-backdrop').classList.contains('hidden')) return closeExcel();
   if ($('modal-backdrop').classList.contains('hidden')) return;
   if (e.key === 'Escape') closeModal();
   if (e.key === 'Enter' && e.target.tagName === 'INPUT') saveTask();

@@ -1,8 +1,8 @@
 /* Service worker — cho phép mở & dùng app hoàn toàn offline.
  * Mỗi lần sửa file giao diện, hãy tăng số phiên bản bên dưới để máy người dùng nhận bản mới. */
-const VERSION = 'v6';
+const VERSION = 'v8';
 const CACHE_NAME = 'ke-hoach-' + VERSION;
-const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
+const SHELL = ['./', './index.html', './styles.css', './app.js', './excel.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

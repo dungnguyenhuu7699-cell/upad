@@ -147,3 +147,11 @@ th.sticky-col{font-size:12px;font-weight:700;text-transform:uppercase;letter-spa
 .btn-save{background:var(--blue);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.3)}.btn-save:hover{background:var(--blue-h)}
 
 .toast{position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--s800);border:1px solid var(--s700);color:var(--s100);padding:10px 16px;border-radius:12px;font-size:13px;z-index:60;max-width:90vw;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+
+/* Excel modal */
+.xl-month{font-size:14px;color:var(--s300)}
+.xl-month small{color:var(--s500)}
+.xl-actions{display:flex;flex-direction:column;gap:10px}
+.xl-actions button{padding:12px;border-radius:12px;font-weight:700;font-size:14px}
+.btn-import{background:var(--green-d);color:#fff}.btn-import:hover{background:#059669}
+.xl-help{font-size:12.5px;color:var(--s400);padding-left:18px;display:flex;flex-direction:column;gap:6px}

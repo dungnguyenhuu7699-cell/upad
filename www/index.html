@@ -33,6 +33,7 @@
             </button>
             <button id="btn-install-pwa" data-act="install" class="chip-btn install hidden">📲 Cài App</button>
             <button id="btn-sound-test" data-act="notify" class="chip-btn" title="Bật thông báo & thử chuông">🔔 Chuông</button>
+            <button data-act="excel" class="chip-btn" title="Xuất / nhập Excel">📊 Excel</button>
           </div>
           <p class="date-text" id="current-date-text">Đang tải ngày...</p>
         </div>
@@ -117,7 +118,30 @@
     </div>
   </div>
 
+  <div id="excel-backdrop" class="backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3>Excel — xuất &amp; nhập</h3>
+        <button data-act="xl-close" aria-label="Đóng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <p class="xl-month">Tháng đang chọn: <b id="excel-month">--</b> <small>(đổi ở tab Lịch tháng)</small></p>
+      <div class="xl-actions">
+        <button class="btn-save" data-act="xl-xlsx">⬇ Xuất file .xlsx</button>
+        <button class="btn-cancel" data-act="xl-xls">⬇ Xuất file .xls</button>
+        <button class="btn-import" data-act="xl-import">⬆ Nhập từ file Excel</button>
+      </div>
+      <input type="file" id="excel-file" class="hidden" />
+      <ul class="xl-help">
+        <li>Xuất ra bảng cả tháng: tên việc, giờ, thời lượng, thứ lặp, ô tick từng ngày, ghi chú.</li>
+        <li>Sửa trong Excel (đổi giờ, thêm dòng mới, tick ngày…) rồi <b>Nhập</b> lại: app tự nhận ngày, tháng, giờ giấc.</li>
+        <li>Việc có giờ luôn xếp lên đầu theo thứ tự giờ; việc không có giờ xếp cuối.</li>
+        <li>Nhập được .xlsx, .xls và .csv. Việc khớp theo cột ID hoặc tên; chưa có thì thêm mới.</li>
+      </ul>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
+  <script src="excel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
